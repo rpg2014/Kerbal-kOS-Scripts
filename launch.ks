@@ -17,6 +17,20 @@ function print_stats {.
   print "PITCH: " at (0,19).
   print pitch_for(ship) at (7,19).
 
+  if (ship:availablethrust > 0 ) {
+    print "THROTTLE: " at (0, 21).
+    print round(get_next_throttle(2),4) at (10,21).
+    print "A_g" at (0,22).
+    print get_g() at (4, 22).
+    print "Current TWR: " at (0, 23).
+    print round(get_TWR(),4) at (13,23).
+    print "diff from ideal TWR" at (0,24).
+    print (1-((get_TWR() -2) / 2  )) at (21, 24).
+
+    print "Other throttle eq" at (0,25).
+    print 2 * Ship:Mass * get_g() / Ship:AvailableThrust at (19, 25).
+  }
+
 }
 function type_to_vector {
   parameter ves,thing.
@@ -43,21 +57,60 @@ function pitch_for {
 
   return 90 - vang(ves:up:vector, pointing).
 }
+function get_g {
+    local a_g to (constant:g * kerbin:mass) / (altitude + kerbin:radius)^2.
+    return a_g.
+}
+function get_TWR {
+
+    if (ship:availablethrust > 0 ) {
+        set curTWR to ship:availableThrust / (ship:mass * get_g()).
+        return curTWR.
+    }
+    else {
+        return 0.0.
+    }
+}
+
+
+
+function get_next_throttle {
+    parameter desiredTWR.
+    local curTWR to get_TWR().
+
+    set throttle_scaling to 1.
+    
+    if (ship:availablethrust > 0 ) {
+        local differenceFromIdealTWR to 1-((curTWR -desiredTWR) / desiredTWR  ).
+        local nextThrottle to ((throttle_scaling * (differenceFromIdealTWR)) * availableThrust) / maxThrust.
+
+        // local nextThrottle to (1-differenceFromIdealTWR)
+
+        return nextThrottle.
+    } else {
+        return 0.0.
+    }
+}
 
 // ****************************************************************
 // Variables.
 // ****************************************************************
-set orbitalInclination to 60.
+set orbitalInclination to 190.0.
 
 //Next, we'll lock our throttle to x%. depending on solid fuel boosters
 //TODO: make this more intelligent based off of the thrust to weight ratio of the rocket
-LOCK THROTTLE TO choose 1 if stage:solidfuel else 1.0.   // 1.0 is the max, 0.0 is idle.
-
+set idealTWR to 2.
+set curThrottle to choose 1 if stage:solidfuel else 1.0.   // 1.0 is the max, 0.0 is idle.
+lock throttle to curThrottle.
 
 //This is our countdown loop, which cycles from 10 to 0
 PRINT "Counting down:".
 FROM {local countdown is 3.} UNTIL countdown = 0 STEP {SET countdown to countdown - 1.} DO {
     PRINT "..." + countdown.
+    // if countdown <= 1 {
+    //     // print "igniting Engines".
+    //     stage.
+    // }
     WAIT 1. // pauses the script here for 1 second.
 }
 
@@ -100,6 +153,8 @@ UNTIL APOAPSIS > 100000 {
     print_stats().
     SET curDirection TO HEADING(orbitalInclination,desiredPitch).
 
+    set curThrottle to get_next_throttle(idealTWR).
+
     if stage:solidfuel {
         set solidFuelRemaining to solidEngine:CONSUMEDRESOURCES:values[0]:amount / solidEngine:CONSUMEDRESOURCES:values[0]:capacity.
     }
@@ -116,13 +171,17 @@ UNTIL APOAPSIS > 100000 {
     if ( stage:solidfuel and solidFuelRemaining < 0.05 and solidEngine:flameout = false) {
         print "Preparing to stage solid boosters".
         lock throttle to 1.0.
-        set curDirection to ship:velocity:surface:direction.
+        set curDirection to ship:velocity:surface:normalized.
         
         wait until solidEngine:flameout.
         wait 2.
         print "Staging solid boosters".
         stage.
         wait 2.
+        // Post solid posster throttle control, should switch to get next throttle
+        if (ship:availablethrust > 0 ) {
+            set curThrottle to  min(idealTWR * Ship:Mass * get_g() / Ship:AvailableThrust, 1)..
+        }
 
     // Below is the gravity turn.
     // want to change to this equation,
@@ -161,6 +220,7 @@ when APOAPSIS > 100_000 then {
     Lock STEERING to ship:velocity:surface:direction.
     lock throttle to 0.
     //remove below when we want to get the most out of the launch booster
+    print "Stage now if you want to return the first stage to Kerbin".
     // stage.
 }.
 
@@ -188,12 +248,31 @@ when APOAPSIS > 100_000 then {
 // }
 
 // if the cpu is on the first stage, then lock in a retrograde direction.
+if(stage:number <= 1) {
+when ship:verticalspeed < 0 then {
+    print "Preparing for reentry".
+    lock steering to velocity:surface:direction:inverse.
+}
+wait until ship:verticalspeed < 0.
+} else {
+    {
+    print "Circularizing orbit".
+    // Circulize orbit.
+    wait until ETA:apoapsis < 15. 
+    Lock STEERING to HEADING(90,0).
+    lock throttle to 1.
 
-// when ship:verticalspeed < 0 then {
-//     print "Preparing for reentry".
-//     lock steering to velocity:surface:direction:inverse.
+
+    wait until periapsis > 80_000.
+
+
+    PRINT "Circular orbit reached".
+    print "APOAPSIS: ".
+    print apoapsis.
+    print "PERIAPSIS".
+    print periapsis.
 // }
-// wait until ship:verticalspeed < 0.
+}
 
 
 //At this point, our apoapsis is above 100km and our main loop has ended. Next
