@@ -82,9 +82,9 @@ function get_next_throttle {
     
     if (ship:availablethrust > 0 ) {
         local differenceFromIdealTWR to 1-((curTWR -desiredTWR) / desiredTWR  ).
-        local nextThrottle to ((throttle_scaling * (differenceFromIdealTWR)) * availableThrust) / maxThrust.
+        // local nextThrottle to ((throttle_scaling * (differenceFromIdealTWR)) * availableThrust) / maxThrust.
 
-        // local nextThrottle to (1-differenceFromIdealTWR)
+        local nextThrottle to idealTWR * Ship:Mass * get_g() / Ship:AvailableThrust.
 
         return nextThrottle.
     } else {
@@ -95,7 +95,8 @@ function get_next_throttle {
 // ****************************************************************
 // Variables.
 // ****************************************************************
-set orbitalInclination to 190.0.
+set orbitalInclination to 90.0.
+set attemptReentry to false.
 
 //Next, we'll lock our throttle to x%. depending on solid fuel boosters
 //TODO: make this more intelligent based off of the thrust to weight ratio of the rocket
@@ -192,11 +193,11 @@ UNTIL APOAPSIS > 100000 {
         //heading of 90 degrees (east)
         set desiredPitch to 90.
     //Once we pass 100m/s, we want to pitch down ten degrees
-    } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 50 AND SHIP:VELOCITY:SURFACE:MAG < 150 {
+    } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 50 AND SHIP:VELOCITY:SURFACE:MAG < 200 {
         set desiredPitch to 80.
-    } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 150 AND SHIP:VELOCITY:SURFACE:MAG < 300 {
+    } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 200 AND SHIP:VELOCITY:SURFACE:MAG < 350 {
         set desiredPitch to 70.
-    } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 300 AND SHIP:VELOCITY:SURFACE:MAG < 400 {
+    } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 350 AND SHIP:VELOCITY:SURFACE:MAG < 400 {
         set desiredPitch to 60.
     } ELSE IF SHIP:VELOCITY:SURFACE:MAG >= 400 AND SHIP:VELOCITY:SURFACE:MAG < 500 {
         set desiredPitch to 50.
@@ -216,8 +217,8 @@ UNTIL APOAPSIS > 100000 {
 }.
 
 when APOAPSIS > 100_000 then {
-    PRINT "100km apoapsis reached, locking heading direction".
-    Lock STEERING to ship:velocity:surface:direction.
+    PRINT "100km apoapsis reached, cutting engines".
+    
     lock throttle to 0.
     //remove below when we want to get the most out of the launch booster
     print "Stage now if you want to return the first stage to Kerbin".
@@ -229,33 +230,48 @@ when APOAPSIS > 100_000 then {
 
 
 // if we are still using the cpu stage to orbit
-// if stage:number <= 1 {
-    print "Circularizing orbit".
-    // Circulize orbit.
-    wait until ETA:apoapsis < 15. 
-    Lock STEERING to HEADING(90,0).
-    lock throttle to 1.
+// // if stage:number <= 1 {
+//     print "Circularizing orbit".
+//     // Circulize orbit.
+//     wait until ETA:apoapsis < 15. 
+//     Lock STEERING to HEADING(90,0).
+//     lock throttle to 1.
 
 
-    wait until periapsis > 80_000.
+//     wait until periapsis > 80_000.
 
 
-    PRINT "Circular orbit reached".
-    print "APOAPSIS: ".
-    print apoapsis.
-    print "PERIAPSIS".
-    print periapsis.
+//     PRINT "Circular orbit reached".
+//     print "APOAPSIS: ".
+//     print apoapsis.
+//     print "PERIAPSIS".
+//     print periapsis.
 // }
-
-// if the cpu is on the first stage, then lock in a retrograde direction.
-if(stage:number <= 1) {
-when ship:verticalspeed < 0 then {
-    print "Preparing for reentry".
-    lock steering to velocity:surface:direction:inverse.
+wait until ETA:apoapsis < 30.
+Lock STEERING to ship:velocity:surface:direction.
+// if the cpu is on the last or second to last stage, then lock in a retrograde direction.
+// or if bool is set
+if(attemptReentry) {
+    print "Attempt reentry bool set".
 }
-wait until ship:verticalspeed < 0.
+if(stage:number <= 1 or attemptReentry) {
+    // Landing cpu stage logic
+    when ship:verticalspeed < 0 then {
+        print "Preparing for reentry".
+        lock steering to velocity:surface:direction:inverse.
+    }
+    wait until ship:verticalspeed < 0.
+    when altitude < 4000 then {
+        if(ship:availablethrust > 0){
+            print "Firing thrusters to hover".
+            lock throttle to 1 * Ship:Mass * get_g() / Ship:AvailableThrust.
+        }else {
+            print "No fuel, crashing".
+        }
+    }
+    wait until altitude <4000.
 } else {
-    {
+
     print "Circularizing orbit".
     // Circulize orbit.
     wait until ETA:apoapsis < 15. 
