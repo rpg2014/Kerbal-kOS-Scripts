@@ -115,10 +115,7 @@ UNTIL APOAPSIS > orbitalHeight + 2_000 {
     
 }
 lock steering to heading(orbitalInclination, 3).
-if (attemptReentry) {
-    print "Staging for reentry".
-    stage.
-}
+
 when APOAPSIS > orbitalHeight then {
     PRINT "Orbital Apoapsis reached, cutting engines".
     
@@ -127,12 +124,19 @@ when APOAPSIS > orbitalHeight then {
     print "Stage now if you want to return the first stage to Kerbin".
     // stage.
 }.
+wait until altitude > 50_000.
+if (attemptReentry) {
+    print "Staging for reentry".
+    stage.
+}
 wait 5.
 warpTo(time:seconds + eta:apoapsis - 35).
 wait until ETA:apoapsis < 30.
 
+//move landing + circle to new file
 
 if(attemptReentry) {
+    lock steering to ship:velocity:surface:direction:inverse.
     // Landing cpu stage logic
     when ship:verticalspeed < 0 then {
         print "Preparing for reentry".
